@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Room Design with IoT Control</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+        }
+        #container { 
+            position: relative; 
+            width: 100vw; 
+            height: 100vh; 
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+        .control-group {
+            margin: 10px 0;
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    
+    <div id="controls">
+        <h3>🏠 Smart Room IoT Control Panel</h3>
+        
+        <div class="control-group">
+            <strong>🎯 Camera View:</strong><br>
+            <button onclick="switchView('top')">Top View</button>
+            <button onclick="switchView('front')">Front View</button>
+            <button onclick="switchView('corner')">Corner View</button>
+        </div>
+        
+        <div class="control-group">
+            <strong>🚪 Wardrobe Control:</strong><br>
+            <button onclick="toggleWardrobe()">Open/Close Wardrobe</button>
+            <button onclick="rotateWardrobe()">Rotate Wardrobe Doors</button>
+        </div>
+        
+        <div class="control-group">
+            <strong>💻 Computer Table:</strong><br>
+            <button onclick="toggleTable()">Fold/Unfold Table</button>
+            <button onclick="toggleChair()">Fold/Unfold Chair</button>
+        </div>
+        
+        <div class="control-group">
+            <strong>🛋️ Sofa & Bed:</strong><br>
+            <button onclick="toggleSofa()">Fold/Unfold Sofa</button>
+            <button onclick="toggleBed()">Convert Sofa to Bed</button>
+        </div>
+        
+        <div class="control-group">
+            <strong>🌙 Lighting:</strong><br>
+            <button onclick="toggleLights()">Toggle Lights</button>
+            <button onclick="changeWallColor()">Change Wall Color</button>
+        </div>
+        
+        <div class="control-group">
+            <strong>⚡ Automation:</strong><br>
+            <button onclick="autoArrange()">Auto-Arrangement</button>
+            <button onclick="resetRoom()">Reset Room</button>
+        </div>
+    </div>
+    
+    <div id="instructions">
+        <strong>Instructions:</strong><br>
+        • Drag mouse to rotate view<br>
+        • Scroll to zoom in/out<br>
+        • Use buttons to control furniture<br>
+        • Double-click any object to focus<br>
+        • IoT simulation with manual control
+    </div>
+
+    <script>
+        // Basic Three.js setup
+        let scene, camera, renderer, controls;
+        const roomWidth = 12, roomDepth = 12, roomHeight = 10;
+        
+        // Animation variables
+        let wardrobeOpen = false;
+        let tableFolded = false;
+        let chairFolded = false;
+        let sofaFolded = false;
+        let bedMode = false;
+        let lightsOn = true;
+        
+        // Object references
+        let wardrobe, table, chair, sofa, bed;
+        let walls = [];
+        let lights = [];
+        
+        init();
+        animate();
+        
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(15, 15, 15);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('container').appendChild(renderer.domElement);
+            
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            lights.push(directionalLight);
+            
+            // Create room
+            createRoom();
+            createFurniture();
+            createFloor();
+            
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+        }
+        
+        function createRoom() {
+            // Floor (will be separate)
+            
+            // Walls - Three walls only
+            const wallThickness = 0.3;
+            const wallMaterial = new THREE.MeshPhongMaterial({ color: 0xF5F5DC });
+            
+            // Back wall
+            const backWall = new THREE.Mesh(
+                new THREE.BoxGeometry(roomWidth, roomHeight, wallThickness),
+                wallMaterial
+            );
+            backWall.position.set(0, roomHeight/2, -roomDepth/2);
+            backWall.castShadow = true;
+            backWall.receiveShadow = true;
+            scene.add(backWall);
+            walls.push(backWall);
+            
+            // Left wall
+            const leftWall = new THREE.Mesh(
+                new THREE.BoxGeometry(wallThickness, roomHeight, roomDepth),
+                wallMaterial
+            );
+            leftWall.position.set(-roomWidth/2, roomHeight/2, 0);
+            leftWall.castShadow = true;
+            leftWall.receiveShadow = true;
+            scene.add(leftWall);
+            walls.push(leftWall);
+            
+            // Right wall
+            const rightWall = new THREE.Mesh(
+                new THREE.BoxGeometry(wallThickness, roomHeight, roomDepth),
+                wallMaterial
+            );
+            rightWall.position.set(roomWidth/2, roomHeight/2, 0);
+            rightWall.castShadow = true;
+            rightWall.receiveShadow = true;
+            scene.add(rightWall);
+            walls.push(rightWall);
+            
+            // Door opening on front side (no wall)
+            const doorGeometry = new THREE.BoxGeometry(4, 8, 0.1);
+            const doorMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+            const door = new THREE.Mesh(doorGeometry, doorMaterial);
+            door.position.set(4, 4, roomDepth/2);
+            scene.add(door);
+        }
+        
+        function createFloor() {
+            const floorGeometry = new THREE.PlaneGeometry(roomWidth, roomDepth);
+            const floorMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x808080,
+                side: THREE.DoubleSide
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = Math.PI / 2;
+            floor.position.y = 0;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            // Grid for better visualization
+            const gridHelper = new THREE.GridHelper(roomWidth, 10, 0x000000, 0x444444);
+            gridHelper.position.y = 0.01;
+            scene.add(gridHelper);
+        }
+        
+        function createFurniture() {
+            // Wardrobe (folding doors)
+            const wardrobeGroup = new THREE.Group();
+            
+            const wardrobeBody = new THREE.Mesh(
+                new THREE.BoxGeometry(3, 8, 2),
+                new THREE.MeshPhongMaterial({ color: 0x2F4F4F })
+            );
+            wardrobeBody.position.y = 4;
+            wardrobeBody.castShadow = true;
+            wardrobeBody.receiveShadow = true;
+            
+            const doorLeft = new THREE.Mesh(
+                new THREE.BoxGeometry(0.05, 7.5, 1.9),
+                new THREE.MeshPhongMaterial({ color: 0x8B7355 })
+            );
+            doorLeft.position.set(-0.5, 4, 0);
+            
+            const doorRight = new THREE.Mesh(
+                new THREE.BoxGeometry(0.05, 7.5, 1.9),
+                new THREE.MeshPhongMaterial({ color: 0x8B7355 })
+            );
+            doorRight.position.set(0.5, 4, 0);
+            
+            wardrobeGroup.add(wardrobeBody);
+            wardrobeGroup.add(doorLeft);
+            wardrobeGroup.add(doorRight);
+            wardrobeGroup.position.set(-4, 0, -4);
+            
+            scene.add(wardrobeGroup);
+            wardrobe = wardrobeGroup;
+            
+            // Computer Table (foldable)
+            const tableGroup = new THREE.Group();
+            
+            const tableTop = new THREE.Mesh(
+                new THREE.BoxGeometry(4, 0.2, 2),
+                new THREE.MeshPhongMaterial({ color: 0xD2691E })
+            );
+            tableTop.position.y = 2.5;
+            
+            const tableLeg1 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.2, 2.5, 0.2),
+                new THREE.MeshPhongMaterial({ color: 0x696969 })
+            );
+            tableLeg1.position.set(-1.9, 1.25, -0.9);
+            
+            const tableLeg2 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.2, 2.5, 0.2),
+                new THREE.MeshPhongMaterial({ color: 0x696969 })
+            );
+            tableLeg2.position.set(1.9, 1.25, -0.9);
+            
+            tableGroup.add(tableTop);
+            tableGroup.add(tableLeg1);
+            tableGroup.add(tableLeg2);
+            tableGroup.position.set(3, 0, 3);
+            
+            scene.add(tableGroup);
+            table = tableGroup;
+            
+            // Chair (foldable)
+            const chairGroup = new THREE.Group();
+            
+            const chairSeat = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 0.2, 1.5),
+                new THREE.MeshPhongMaterial({ color: 0x8B4513 })
+            );
+            chairSeat.position.y = 1.5;
+            
+            const chairBack = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 2, 0.2),
+                new THREE.MeshPhongMaterial({ color: 0x8B4513 })
+            );
+            chairBack.position.set(0, 2.5, -0.65);
+            
+            const chairLeg = new THREE.Mesh(
+                new THREE.BoxGeometry(0.2, 1.5, 0.2),
+                new THREE.MeshPhongMaterial({ color: 0x696969 })
+            );
+            chairLeg.position.set(0, 0.75, 0);
+            
+            chairGroup.add(chairSeat);
+            chairGroup.add(chairBack);
+            chairGroup.add(chairLeg);
+            chairGroup.position.set(3, 0, 1);
+            
+            scene.add(chairGroup);
+            chair = chairGroup;
+            
+            // Sofa (convertible to bed)
+            const sofaGroup = new THREE.Group();
+            
+            const sofaBase = new THREE.Mesh(
+                new THREE.BoxGeometry(6, 1.5, 2.5),
+                new THREE.MeshPhongMaterial({ color: 0x4169E1 })
+            );
+            sofaBase.position.y = 0.75;
+            
+            const sofaBack = new THREE.Mesh(
+                new THREE.BoxGeometry(6, 2, 0.5),
+                new THREE.MeshPhongMaterial({ color: 0x191970 })
+            );
+            sofaBack.position.set(0, 2, -1);
+            
+            sofaGroup.add(sofaBase);
+            sofaGroup.add(sofaBack);
+            sofaGroup.position.set(0, 0, 4);
+            
+            scene.add(sofaGroup);
+            sofa = sofaGroup;
+            
+            // Bed (hidden initially, appears when sofa converts)
+            const bedGeometry = new THREE.BoxGeometry(6.5, 0.5, 4);
+            const bedMaterial = new THREE.MeshPhongMaterial({ color: 0xFFEBCD });
+            bed = new THREE.Mesh(bedGeometry, bedMaterial);
+            bed.position.set(0, 0.25, 4);
+            bed.visible = false;
+            scene.add(bed);
+        }
+        
+        // Control functions
+        function toggleWardrobe() {
+            wardrobeOpen = !wardrobeOpen;
+            const doorLeft = wardrobe.children[1];
+            const doorRight = wardrobe.children[2];
+            
+            if (wardrobeOpen) {
+                doorLeft.rotation.y = Math.PI / 4;
+                doorRight.rotation.y = -Math.PI / 4;
+                doorLeft.position.x = -1;
+                doorRight.position.x = 1;
+            } else {
+                doorLeft.rotation.y = 0;
+                doorRight.rotation.y = 0;
+                doorLeft.position.x = -0.5;
+                doorRight.position.x = 0.5;
+            }
+        }
+        
+        function rotateWardrobe() {
+            const doorLeft = wardrobe.children[1];
+            const doorRight = wardrobe.children[2];
+            
+            doorLeft.rotation.y += Math.PI / 2;
+            doorRight.rotation.y -= Math.PI / 2;
+        }
+        
+        function toggleTable() {
+            tableFolded = !tableFolded;
+            
+            if (tableFolded) {
+                table.scale.y = 0.3;
+                table.position.y = 0.5;
+            } else {
+                table.scale.y = 1;
+                table.position.y = 0;
+            }
+        }
+        
+        function toggleChair() {
+            chairFolded = !chairFolded;
+            
+            if (chairFolded) {
+                chair.scale.set(0.5, 0.5, 0.5);
+                chair.position.y = 0.5;
+            } else {
+                chair.scale.set(1, 1, 1);
+                chair.position.y = 0;
+            }
+        }
+        
+        function toggleSofa() {
+            sofaFolded = !sofaFolded;
+            
+            if (sofaFolded) {
+                sofa.scale.y = 0.3;
+                sofa.position.y = 0.3;
+            } else {
+                sofa.scale.y = 1;
+                sofa.position.y = 0;
+            }
+        }
+        
+        function toggleBed() {
+            bedMode = !bedMode;
+            
+            if (bedMode) {
+                sofa.visible = false;
+                bed.visible = true;
+                // Transform sofa into bed
+                bed.scale.set(1, 1, 1);
+            } else {
+                sofa.visible = true;
+                bed.visible = false;
+            }
+        }
+        
+        function toggleLights() {
+            lightsOn = !lightsOn;
+            
+            lights.forEach(light => {
+                light.intensity = lightsOn ? 0.8 : 0.2;
+            });
+            
+            walls.forEach(wall => {
+                wall.material.color.set(lightsOn ? 0xF5F5DC : 0x555555);
+            });
+        }
+        
+        function changeWallColor() {
+            const colors = [0xF5F5DC, 0x87CEEB, 0x98FB98, 0xFFE4E1];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            
+            walls.forEach(wall => {
+                wall.material.color.set(randomColor);
+            });
+        }
+        
+        function switchView(viewType) {
+            switch(viewType) {
+                case 'top':
+                    camera.position.set(0, 20, 0);
+                    camera.lookAt(0, 0, 0);
+                    break;
+                case 'front':
+                    camera.position.set(0, 8, 15);
+                    camera.lookAt(0, 4, 0);
+                    break;
+                case 'corner':
+                    camera.position.set(15, 12, 15);
+                    camera.lookAt(0, 4, 0);
+                    break;
+            }
+        }
+        
+        function autoArrange() {
+            // Auto arrangement sequence
+            toggleWardrobe();
+            setTimeout(() => toggleTable(), 500);
+            setTimeout(() => toggleChair(), 1000);
+            setTimeout(() => {
+                if (!bedMode) toggleBed();
+            }, 1500);
+        }
+        
+        function resetRoom() {
+            // Reset all to initial state
+            wardrobeOpen = false;
+            const doorLeft = wardrobe.children[1];
+            const doorRight = wardrobe.children[2];
+            doorLeft.rotation.y = 0;
+            doorRight.rotation.y = 0;
+            doorLeft.position.x = -0.5;
+            doorRight.position.x = 0.5;
+            
+            tableFolded = false;
+            table.scale.y = 1;
+            table.position.y = 0;
+            
+            chairFolded = false;
+            chair.scale.set(1, 1, 1);
+            chair.position.y = 0;
+            
+            sofaFolded = false;
+            sofa.scale.y = 1;
+            sofa.position.y = 0;
+            sofa.visible = true;
+            
+            bedMode = false;
+            bed.visible = false;
+            
+            lightsOn = true;
+            lights.forEach(light => {
+                light.intensity = 0.8;
+            });
+            
+            walls.forEach(wall => {
+                wall.material.color.set(0xF5F5DC);
+            });
+            
+            switchView('corner');
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
